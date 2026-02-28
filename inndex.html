@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mail.tm Inbox - With Delete</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: { extend: { colors: { primary: '#4f46e5' } } }
+    }
+  </script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen">
+
+<div id="app" class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <!-- Login Section -->
+  <div id="login-section">
+    <h1 class="text-3xl font-bold mb-6">Inbox Login (mail.tm)</h1>
+    <div class="flex flex-col md:flex-row gap-4 mb-6">
+      <input 
+        type="email" 
+        id="email" 
+        placeholder="Enter your full email (e.g. user@domain.com)" 
+        class="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white dark:bg-gray-800"
+      />
+      <button 
+        id="loginBtn"
+        class="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+      >
+        Login & Load Inbox
+      </button>
+    </div>
+    <div id="status" class="mb-6 p-4 rounded-lg hidden"></div>
+  </div>
+
+  <!-- Inbox List -->
+  <div id="inbox-section" class="hidden">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-3xl font-bold">Inbox</h1>
+      <div>
+        <span id="email-display" class="text-lg font-semibold text-indigo-600 dark:text-indigo-400 mr-4"></span>
+        <button id="refreshBtn" class="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600">
+          <i class="fas fa-sync-alt mr-2"></i> Refresh
+        </button>
+      </div>
+    </div>
+    <div id="total-info" class="mb-4 text-sm text-gray-500 dark:text-gray-400"></div>
+    <div id="messages" class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden"></div>
+  </div>
+
+  <!-- Single Message View -->
+  <div id="message-view" class="hidden">
+    <div class="flex items-center justify-between mb-6">
+      <a href="#" id="backBtn" class="flex items-center text-base font-medium text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+        <svg class="mr-1 h-5 w-5 flex-shrink-0 -ml-1" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clip-rule="evenodd"></path>
+        </svg>
+        Back to Inbox
+      </a>
+      <button id="deleteMsgBtn" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center gap-2">
+        <i class="fas fa-trash-alt"></i> Delete This Message
+      </button>
+    </div>
+
+    <div class="mb-6">
+      <h2 id="msg-subject" class="text-2xl font-bold text-gray-900 dark:text-gray-300"></h2>
+    </div>
+
+    <div class="overflow-hidden border-b border-gray-200 bg-white px-4 py-5 shadow dark:border-gray-700 sm:rounded-md sm:px-6">
+      <div class="flex flex-wrap items-center justify-between -ml-4 -mt-4 sm:flex-nowrap">
+        <div class="ml-4 mt-4 flex items-center">
+          <div class="flex-shrink-0">
+            <div id="msg-avatar" class="inline-flex items-center justify-center w-10 h-10 rounded-full text-white font-semibold text-xl"></div>
+          </div>
+          <div class="ml-4">
+            <div id="msg-from" class="text-lg font-medium text-indigo-600 dark:text-indigo-400"></div>
+            <div id="msg-to" class="flex items-center text-sm text-gray-500 dark:text-gray-400">
+              <svg class="mr-1.5 h-5 w-5 flex-shrink-0 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M2.003 5.884L10 9.882l7.997-3.998A2 2 0 0016 4H4a2 2 0 00-1.997 1.884zM18 8.118l-8 4-8-4V14a2 2 0 002 2h12a2 2 0 002-2V8.118z" clip-rule="evenodd"></path>
+              </svg>
+              <span>To: <span id="msg-recipient"></span></span>
+            </div>
+          </div>
+        </div>
+        <div class="ml-4 mt-4 flex-shrink-0">
+          <time id="msg-date" class="text-gray-500 dark:text-gray-400"></time>
+        </div>
+      </div>
+
+      <div class="mt-6 px-4 py-5 sm:px-6">
+        <div class="aspect-w-16 aspect-h-9">
+          <iframe id="msg-iframe" class="w-full h-[70vh] border border-gray-300 dark:border-gray-600 rounded" sandbox="allow-scripts"></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API = "https://api.mail.tm";
+  const FIXED_PASS = "India@123";
+  let token = null;
+  let currentEmail = "";
+  let interval = null;
+  let currentMsgId = null; // for delete in detail view
+
+  const statusEl      = document.getElementById("status");
+  const loginSection  = document.getElementById("login-section");
+  const inboxSection  = document.getElementById("inbox-section");
+  const messageView   = document.getElementById("message-view");
+  const emailDisplay  = document.getElementById("email-display");
+  const totalInfo     = document.getElementById("total-info");
+  const messagesDiv   = document.getElementById("messages");
+  const emailInput    = document.getElementById("email");
+  const loginBtn      = document.getElementById("loginBtn");
+  const refreshBtn    = document.getElementById("refreshBtn");
+  const backBtn       = document.getElementById("backBtn");
+  const deleteMsgBtn  = document.getElementById("deleteMsgBtn");
+
+  // Message view elements
+  const msgSubject    = document.getElementById("msg-subject");
+  const msgAvatar     = document.getElementById("msg-avatar");
+  const msgFrom       = document.getElementById("msg-from");
+  const msgRecipient  = document.getElementById("msg-recipient");
+  const msgDate       = document.getElementById("msg-date");
+  const msgIframe     = document.getElementById("msg-iframe");
+
+  function showStatus(msg, type = "") {
+    if (!msg) { statusEl.classList.add("hidden"); return; }
+    statusEl.textContent = msg;
+    statusEl.className = `p-4 rounded-lg ${type === "success" ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" : type === "error" ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300" : "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"}`;
+    statusEl.classList.remove("hidden");
+    setTimeout(() => statusEl.classList.add("hidden"), 5000); // auto hide after 5s
+  }
+
+  async function apiRequest(method, path, body = null) {
+    const headers = { Authorization: `Bearer ${token}` };
+    if (body) headers["Content-Type"] = "application/json";
+    const res = await fetch(`${API}${path}`, { method, headers, body: body ? JSON.stringify(body) : null });
+    if (!res.ok) {
+      if (method === "DELETE" && res.status === 204) return true;
+      throw new Error(`API error: ${res.status} ${await res.text()}`);
+    }
+    return res.status === 204 ? true : await res.json();
+  }
+
+  async function deleteMessage(id, cardElement = null) {
+    if (!confirm("Are you sure you want to delete this message?")) return;
+    try {
+      await apiRequest("DELETE", `/messages/${id}`);
+      showStatus("Message deleted successfully", "success");
+      if (cardElement) cardElement.remove(); // remove from list
+      if (messageView.classList.contains("hidden") === false) backToInbox(); // close detail if open
+    } catch (err) {
+      showStatus("Delete failed: " + err.message, "error");
+    }
+  }
+
+  async function getToken(email) {
+    const res = await fetch(`${API}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address: email, password: FIXED_PASS })
+    });
+    if (!res.ok) throw new Error("Login failed — check email & password");
+    return (await res.json()).token;
+  }
+
+  async function fetchAllMessages() {
+    let all = [];
+    let page = 1;
+    while (true) {
+      const data = await apiRequest("GET", `/messages?page=${page}`);
+      const items = data["hydra:member"] || [];
+      all = all.concat(items);
+      if (page === 1) totalInfo.textContent = `Total: ${data["hydra:totalItems"] || 0} messages`;
+      if (!data["hydra:view"]?.["hydra:next"] || items.length === 0) break;
+      page++;
+      await new Promise(r => setTimeout(r, 400));
+    }
+    return all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  function getInitials(name = "?") {
+    const parts = name.trim().split(/\s+/);
+    return (parts[0]?.[0] || "") + (parts[1]?.[0] || "").toUpperCase() || "?";
+  }
+
+  function getColor(str = "") {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    const hue = Math.abs(hash) % 360;
+    return `hsl(${hue}, 70%, 55%)`;
+  }
+
+  async function loadInbox() {
+    showStatus("Loading messages...", "");
+    try {
+      const msgs = await fetchAllMessages();
+      messagesDiv.innerHTML = "";
+      if (msgs.length === 0) {
+        messagesDiv.innerHTML = `<div class="p-12 text-center text-gray-500 dark:text-gray-400">No messages yet...</div>`;
+        return;
+      }
+      msgs.forEach(msg => {
+        const fromAddr = msg.from?.address || "unknown";
+        const fromName = msg.from?.name || fromAddr.split("@")[0];
+        const initials = getInitials(fromName);
+        const bg = getColor(fromAddr);
+        const date = new Date(msg.createdAt).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) + " " + new Date(msg.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        const preview = (msg.intro || "").slice(0, 100) + (msg.intro?.length > 100 ? "..." : "");
+
+        const card = document.createElement("div");
+        card.className = "group relative transition hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer";
+        card.innerHTML = `
+          <div class="flex items-center px-4 py-5 sm:px-6">
+            <div class="flex-shrink-0 mr-4">
+              <div class="w-12 h-12 rounded-full text-white font-semibold text-lg flex items-center justify-center" style="background:${bg};">${initials}</div>
+            </div>
+            <div class="min-w-0 flex-1">
+              <div class="flex justify-between">
+                <p class="text-sm font-medium text-indigo-600 dark:text-indigo-400 truncate">${fromName}</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400">${date}</p>
+              </div>
+              <p class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-300 truncate">${msg.subject || "(No subject)"}</p>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-1">${preview || "—"}</p>
+            </div>
+            <button class="delete-btn ml-4 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition">
+              <i class="fas fa-trash-alt text-xl"></i>
+            </button>
+          </div>
+        `;
+        card.querySelector(".delete-btn").onclick = (e) => {
+          e.stopPropagation();
+          deleteMessage(msg.id, card);
+        };
+        card.onclick = (e) => {
+          if (e.target.closest(".delete-btn")) return;
+          showMessage(msg.id);
+        };
+        messagesDiv.appendChild(card);
+      });
+      showStatus(`Loaded ${msgs.length} messages`, "success");
+    } catch (err) {
+      showStatus("Error loading inbox: " + err.message, "error");
+    }
+  }
+
+  async function showMessage(id) {
+    showStatus("Loading full message...", "");
+    try {
+      const msg = await apiRequest("GET", `/messages/${id}`);
+      currentMsgId = id;
+
+      msgSubject.textContent = msg.subject || "(No subject)";
+      const fromAddr = msg.from?.address || "Unknown";
+      const fromName = msg.from?.name || fromAddr.split("@")[0];
+      msgFrom.innerHTML = `${fromName} <span class="text-sm font-normal text-gray-700 dark:text-gray-400">(${fromAddr})</span>`;
+      msgRecipient.textContent = currentEmail;
+      msgDate.textContent = new Date(msg.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+
+      const initials = getInitials(fromName);
+      const bg = getColor(fromAddr);
+      msgAvatar.innerHTML = initials;
+      msgAvatar.style.background = bg;
+
+      const htmlContent = msg.html?.[0] || (msg.text ? msg.text.replace(/\n/g, "<br>") : "<p>No content</p>");
+      msgIframe.srcdoc = htmlContent;
+
+      inboxSection.classList.add("hidden");
+      messageView.classList.remove("hidden");
+      showStatus("", "");
+    } catch (err) {
+      showStatus("Error: " + err.message, "error");
+    }
+  }
+
+  function backToInbox() {
+    messageView.classList.add("hidden");
+    inboxSection.classList.remove("hidden");
+    msgIframe.srcdoc = "";
+    currentMsgId = null;
+  }
+
+  async function login() {
+    currentEmail = emailInput.value.trim();
+    if (!currentEmail.includes("@")) {
+      showStatus("Enter valid email", "error");
+      return;
+    }
+
+    loginBtn.disabled = true;
+    showStatus("Logging in...", "");
+
+    try {
+      token = await getToken(currentEmail);
+      emailDisplay.textContent = currentEmail;
+      loginSection.classList.add("hidden");
+      inboxSection.classList.remove("hidden");
+      showStatus("Login successful", "success");
+      await loadInbox();
+      if (interval) clearInterval(interval);
+      interval = setInterval(loadInbox, 15000);
+    } catch (err) {
+      showStatus("Error: " + err.message, "error");
+    } finally {
+      loginBtn.disabled = false;
+    }
+  }
+
+  // Event listeners
+  loginBtn.addEventListener("click", login);
+  refreshBtn.addEventListener("click", loadInbox);
+  backBtn.addEventListener("click", (e) => { e.preventDefault(); backToInbox(); });
+  emailInput.addEventListener("keypress", e => { if (e.key === "Enter") login(); });
+  deleteMsgBtn.addEventListener("click", () => {
+    if (currentMsgId) deleteMessage(currentMsgId);
+  });
+</script>
+</body>
+</html>
