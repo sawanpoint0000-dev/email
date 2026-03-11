@@ -104,257 +104,293 @@
 
 <script>
   
-  const API = "https://mailtm-proxy.sawanpoint0000.workers.dev";
+ const API = "https://mailtm-proxy.sawanpoint0000.workers.dev";
+const API_KEY = "SAWAN_SECRET_999";
 
-  let token = null;
-  let currentEmail = "";
-  let interval = null;
-  let currentMsgId = null;
+let token = null;
+let currentEmail = "";
+let interval = null;
+let currentMsgId = null;
 
-  const statusEl      = document.getElementById("status");
-  const loginSection  = document.getElementById("login-section");
-  const inboxSection  = document.getElementById("inbox-section");
-  const messageView   = document.getElementById("message-view");
-  const emailDisplay  = document.getElementById("email-display");
-  const totalInfo     = document.getElementById("total-info");
-  const messagesDiv   = document.getElementById("messages");
-  const emailInput    = document.getElementById("email");
-  const passwordInput = document.getElementById("password");
-  const loginBtn      = document.getElementById("loginBtn");
-  const refreshBtn    = document.getElementById("refreshBtn");
-  const backBtn       = document.getElementById("backBtn");
-  const deleteMsgBtn  = document.getElementById("deleteMsgBtn");
+const statusEl      = document.getElementById("status");
+const loginSection  = document.getElementById("login-section");
+const inboxSection  = document.getElementById("inbox-section");
+const messageView   = document.getElementById("message-view");
+const emailDisplay  = document.getElementById("email-display");
+const totalInfo     = document.getElementById("total-info");
+const messagesDiv   = document.getElementById("messages");
+const emailInput    = document.getElementById("email");
+const passwordInput = document.getElementById("password");
+const loginBtn      = document.getElementById("loginBtn");
+const refreshBtn    = document.getElementById("refreshBtn");
+const backBtn       = document.getElementById("backBtn");
+const deleteMsgBtn  = document.getElementById("deleteMsgBtn");
 
-  const msgSubject   = document.getElementById("msg-subject");
-  const msgAvatar    = document.getElementById("msg-avatar");
-  const msgFrom      = document.getElementById("msg-from");
-  const msgRecipient = document.getElementById("msg-recipient");
-  const msgDate      = document.getElementById("msg-date");
-  const msgIframe    = document.getElementById("msg-iframe");
+const msgSubject   = document.getElementById("msg-subject");
+const msgAvatar    = document.getElementById("msg-avatar");
+const msgFrom      = document.getElementById("msg-from");
+const msgRecipient = document.getElementById("msg-recipient");
+const msgDate      = document.getElementById("msg-date");
+const msgIframe    = document.getElementById("msg-iframe");
 
-  function showStatus(msg, type = "") {
-    if (!msg) { statusEl.classList.add("hidden"); return; }
-    statusEl.textContent = msg;
-    statusEl.className = `p-4 rounded-lg ${type === "success" ? "bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300" : type === "error" ? "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300" : "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"}`;
-    statusEl.classList.remove("hidden");
-    setTimeout(() => statusEl.classList.add("hidden"), 5000);
-  }
 
-  async function apiRequest(method, path, body = null) {
-    const headers = { 
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json"
-    };
+function showStatus(msg, type=""){
+if(!msg){statusEl.classList.add("hidden");return;}
+statusEl.textContent=msg;
+statusEl.className=`p-4 rounded-lg ${
+type==="success"?"bg-green-100 text-green-800":
+type==="error"?"bg-red-100 text-red-800":
+"bg-blue-100 text-blue-800"
+}`;
+statusEl.classList.remove("hidden");
+setTimeout(()=>statusEl.classList.add("hidden"),5000);
+}
 
-    const res = await fetch(`${API}${path}`, {
-      method,
-      headers,
-      body: body ? JSON.stringify(body) : null
-    });
 
-    if (!res.ok) {
-      if (method === "DELETE" && res.status === 204) return true;
-      const errText = await res.text().catch(() => "");
-      throw new Error(`API error ${res.status}: ${errText || "No details"}`);
-    }
+async function apiRequest(method,path,body=null){
 
-    return res.status === 204 ? true : await res.json();
-  }
+const headers={
+"Authorization":`Bearer ${token}`,
+"Content-Type":"application/json",
+"x-api-key":API_KEY
+};
 
-  async function deleteMessage(id, cardElement = null) {
-    if (!confirm("Are you sure you want to delete this message?")) return;
-    try {
-      await apiRequest("DELETE", `/messages/${id}`);
-      showStatus("Message deleted successfully", "success");
-      if (cardElement) cardElement.remove();
-      if (!messageView.classList.contains("hidden")) backToInbox();
-    } catch (err) {
-      showStatus("Delete failed: " + err.message, "error");
-    }
-  }
+const res=await fetch(`${API}${path}`,{
+method,
+headers,
+body:body?JSON.stringify(body):null
+});
 
-  async function getToken(email, password) {
-    const res = await fetch(`${API}/token`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address: email, password })
-    });
+if(!res.ok){
+if(method==="DELETE"&&res.status===204)return true;
+throw new Error("API Error "+res.status);
+}
 
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(errText.includes("password") ? "Incorrect password or account issue" : "Login failed");
-    }
+return res.status===204?true:await res.json();
+}
 
-    const data = await res.json();
-    return data.token;
-  }
 
-  async function fetchAllMessages() {
-    let all = [];
-    let page = 1;
-    while (true) {
-      const data = await apiRequest("GET", `/messages?page=${page}`);
-      const items = data["hydra:member"] || [];
-      all = all.concat(items);
-      if (page === 1) {
-        totalInfo.textContent = `Total: ${data["hydra:totalItems"] || 0} messages`;
-      }
-      if (!data["hydra:view"]?.["hydra:next"] || items.length === 0) break;
-      page++;
-      await new Promise(r => setTimeout(r, 400)); // rate limit safety
-    }
-    return all.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }
+async function getToken(email,password){
 
-  function getInitials(name = "?") {
-    const parts = name.trim().split(/\s+/);
-    return (parts[0]?.[0] || "") + (parts[1]?.[0] || "").toUpperCase() || "?";
-  }
+const res=await fetch(`${API}/token`,{
+method:"POST",
+headers:{
+"Content-Type":"application/json",
+"x-api-key":API_KEY
+},
+body:JSON.stringify({
+address:email,
+password:password
+})
+});
 
-  function getColor(str = "") {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    const hue = Math.abs(hash) % 360;
-    return `hsl(${hue}, 70%, 55%)`;
-  }
+if(!res.ok){
+throw new Error("Login Failed");
+}
 
-  async function loadInbox() {
-    showStatus("Loading messages...", "");
-    try {
-      const msgs = await fetchAllMessages();
-      messagesDiv.innerHTML = "";
-      if (msgs.length === 0) {
-        messagesDiv.innerHTML = `<div class="p-12 text-center text-gray-500 dark:text-gray-400">No messages yet...</div>`;
-        return;
-      }
-      msgs.forEach(msg => {
-        const fromAddr = msg.from?.address || "unknown";
-        const fromName = msg.from?.name || fromAddr.split("@")[0];
-        const initials = getInitials(fromName);
-        const bg = getColor(fromAddr);
-        const dateStr = new Date(msg.createdAt);
-        const date = dateStr.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' }) + " " +
-                     dateStr.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
-        const preview = (msg.intro || "").slice(0, 100) + (msg.intro?.length > 100 ? "..." : "");
+const data=await res.json();
+return data.token;
 
-        const card = document.createElement("div");
-        card.className = "group relative transition hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer";
-        card.innerHTML = `
-          <div class="flex items-center px-4 py-5 sm:px-6">
-            <div class="flex-shrink-0 mr-4">
-              <div class="w-12 h-12 rounded-full text-white font-semibold text-lg flex items-center justify-center" style="background:${bg};">${initials}</div>
-            </div>
-            <div class="min-w-0 flex-1">
-              <div class="flex justify-between">
-                <p class="text-sm font-medium text-indigo-600 dark:text-indigo-400 truncate">${fromName}</p>
-                <p class="text-xs text-gray-500 dark:text-gray-400">${date}</p>
-              </div>
-              <p class="mt-1 text-sm font-medium text-gray-900 dark:text-gray-300 truncate">${msg.subject || "(No subject)"}</p>
-              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400 line-clamp-1">${preview || "—"}</p>
-            </div>
-            <button class="delete-btn ml-4 text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition">
-              <i class="fas fa-trash-alt text-xl"></i>
-            </button>
-          </div>
-        `;
+}
 
-        card.querySelector(".delete-btn").onclick = (e) => {
-          e.stopPropagation();
-          deleteMessage(msg.id, card);
-        };
 
-        card.onclick = (e) => {
-          if (e.target.closest(".delete-btn")) return;
-          showMessage(msg.id);
-        };
+async function fetchAllMessages(){
 
-        messagesDiv.appendChild(card);
-      });
-      showStatus(`Loaded ${msgs.length} messages`, "success");
-    } catch (err) {
-      showStatus("Error loading inbox: " + err.message, "error");
-    }
-  }
+let all=[];
+let page=1;
 
-  async function showMessage(id) {
-    showStatus("Loading full message...", "");
-    try {
-      const msg = await apiRequest("GET", `/messages/${id}`);
-      currentMsgId = id;
+while(true){
 
-      msgSubject.textContent = msg.subject || "(No subject)";
+const data=await apiRequest("GET",`/messages?page=${page}`);
 
-      const fromAddr = msg.from?.address || "Unknown";
-      const fromName = msg.from?.name || fromAddr.split("@")[0];
-      msgFrom.innerHTML = `${fromName} <span class="text-sm font-normal text-gray-700 dark:text-gray-400">(${fromAddr})</span>`;
-      msgRecipient.textContent = currentEmail;
-      msgDate.textContent = new Date(msg.createdAt).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+const items=data["hydra:member"]||[];
+all=all.concat(items);
 
-      const initials = getInitials(fromName);
-      const bg = getColor(fromAddr);
-      msgAvatar.innerHTML = initials;
-      msgAvatar.style.background = bg;
+if(page===1){
+totalInfo.textContent=`Total: ${data["hydra:totalItems"]||0} messages`;
+}
 
-      const htmlContent = msg.html?.[0] || (msg.text ? msg.text.replace(/\n/g, "<br>") : "<p>No content available</p>");
-      msgIframe.srcdoc = htmlContent;
+if(!data["hydra:view"]?.["hydra:next"]||items.length===0)break;
 
-      inboxSection.classList.add("hidden");
-      messageView.classList.remove("hidden");
-      showStatus("", "");
-    } catch (err) {
-      showStatus("Error loading message: " + err.message, "error");
-    }
-  }
+page++;
+await new Promise(r=>setTimeout(r,400));
 
-  function backToInbox() {
-    messageView.classList.add("hidden");
-    inboxSection.classList.remove("hidden");
-    msgIframe.srcdoc = "";
-    currentMsgId = null;
-  }
+}
 
-  async function login() {
-    currentEmail = emailInput.value.trim();
-    const password = passwordInput.value;
+return all.sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
 
-    if (!currentEmail.includes("@")) {
-      showStatus("Please enter a valid email", "error");
-      return;
-    }
-    if (!password) {
-      showStatus("Password is required", "error");
-      return;
-    }
+}
 
-    loginBtn.disabled = true;
-    showStatus("Logging in...", "");
 
-    try {
-      token = await getToken(currentEmail, password);
-      emailDisplay.textContent = currentEmail;
-      loginSection.classList.add("hidden");
-      inboxSection.classList.remove("hidden");
-      showStatus("Login successful!", "success");
-      await loadInbox();
+async function loadInbox(){
 
-      if (interval) clearInterval(interval);
-      interval = setInterval(loadInbox, 15000); // auto-refresh every 15s
-    } catch (err) {
-      showStatus("Login failed: " + err.message, "error");
-    } finally {
-      loginBtn.disabled = false;
-    }
-  }
+showStatus("Loading messages...");
 
-  // Event listeners
-  loginBtn.addEventListener("click", login);
-  refreshBtn.addEventListener("click", loadInbox);
-  backBtn.addEventListener("click", (e) => { e.preventDefault(); backToInbox(); });
-  emailInput.addEventListener("keypress", e => { if (e.key === "Enter") login(); });
-  passwordInput.addEventListener("keypress", e => { if (e.key === "Enter") login(); });
-  deleteMsgBtn.addEventListener("click", () => {
-    if (currentMsgId) deleteMessage(currentMsgId);
-  });
+try{
+
+const msgs=await fetchAllMessages();
+
+messagesDiv.innerHTML="";
+
+if(msgs.length===0){
+
+messagesDiv.innerHTML=`<div class="p-10 text-center">No messages yet</div>`;
+return;
+
+}
+
+msgs.forEach(msg=>{
+
+const card=document.createElement("div");
+
+card.className="p-4 border-b cursor-pointer hover:bg-gray-100";
+
+card.innerHTML=`
+<div class="flex justify-between">
+<div>
+<b>${msg.from?.address||"unknown"}</b>
+<br>
+${msg.subject||"(No subject)"}
+</div>
+<div>
+<button class="delete text-red-500">Delete</button>
+</div>
+</div>
+`;
+
+card.querySelector(".delete").onclick=(e)=>{
+e.stopPropagation();
+deleteMessage(msg.id,card);
+};
+
+card.onclick=()=>showMessage(msg.id);
+
+messagesDiv.appendChild(card);
+
+});
+
+showStatus("Inbox loaded","success");
+
+}catch(err){
+
+showStatus(err.message,"error");
+
+}
+
+}
+
+
+async function showMessage(id){
+
+showStatus("Loading message...");
+
+try{
+
+const msg=await apiRequest("GET",`/messages/${id}`);
+
+currentMsgId=id;
+
+msgSubject.textContent=msg.subject||"(No subject)";
+msgFrom.textContent=msg.from?.address||"Unknown";
+msgRecipient.textContent=currentEmail;
+msgDate.textContent=new Date(msg.createdAt).toLocaleString();
+
+const html=msg.html?.[0]||msg.text||"No content";
+
+msgIframe.srcdoc=html;
+
+inboxSection.classList.add("hidden");
+messageView.classList.remove("hidden");
+
+}catch(err){
+
+showStatus(err.message,"error");
+
+}
+
+}
+
+
+async function deleteMessage(id,card){
+
+if(!confirm("Delete this message?"))return;
+
+try{
+
+await apiRequest("DELETE",`/messages/${id}`);
+
+if(card)card.remove();
+
+showStatus("Message deleted","success");
+
+}catch(err){
+
+showStatus("Delete failed","error");
+
+}
+
+}
+
+
+function backToInbox(){
+
+messageView.classList.add("hidden");
+inboxSection.classList.remove("hidden");
+msgIframe.srcdoc="";
+currentMsgId=null;
+
+}
+
+
+async function login(){
+
+currentEmail=emailInput.value.trim();
+const password=passwordInput.value;
+
+if(!currentEmail||!password){
+showStatus("Enter email and password","error");
+return;
+}
+
+loginBtn.disabled=true;
+
+try{
+
+token=await getToken(currentEmail,password);
+
+emailDisplay.textContent=currentEmail;
+
+loginSection.classList.add("hidden");
+inboxSection.classList.remove("hidden");
+
+await loadInbox();
+
+interval=setInterval(loadInbox,15000);
+
+showStatus("Login successful","success");
+
+}catch(err){
+
+showStatus(err.message,"error");
+
+}
+
+loginBtn.disabled=false;
+
+}
+
+
+loginBtn.onclick=login;
+refreshBtn.onclick=loadInbox;
+
+backBtn.onclick=(e)=>{
+e.preventDefault();
+backToInbox();
+};
+
+deleteMsgBtn.onclick=()=>{
+if(currentMsgId)deleteMessage(currentMsgId);
+};
 </script>
 </body>
 </html>
